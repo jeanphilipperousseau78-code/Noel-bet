@@ -753,14 +753,14 @@
             zoomControl: false
         });
 
-        // Fond sombre moderne CartoDB Dark Matter
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            subdomains: 'abcd',
-            maxZoom: 20
-        }).addTo(map);
+        // Initialisation de la carte Leaflet sans clé API
+const map = L.map('map').setView([46.8139, -71.2075], 14); // Coordonnées par défaut (ex: Lévis/Québec)
 
-        houseMarkersLayer = L.layerGroup().addTo(map);
-
+// Utilisation des tuiles gratuites OpenStreetMap (Aucune clé requise)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+}).addTo(map);
         // Marqueur Position Utilisateur
         const userIcon = L.divIcon({
             className: 'custom-user-icon',
