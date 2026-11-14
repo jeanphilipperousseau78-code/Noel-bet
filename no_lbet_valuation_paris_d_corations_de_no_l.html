@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#090d16">
+    <title>NoëlBet — Note & Parie sur les Décos</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS & JS (Carte interactive) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Canvas Confetti pour les gains -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    },
+                    colors: {
+                        xmas: {
+                            bg: '#090d16',
+                            card: '#111827',
+                            cardLight: '#1e293b',
+                            red: '#ef4444',
+                            redDark: '#991b1b',
+                            green: '#10b981',
+                            greenDark: '#065f46',
+                            gold: '#f59e0b',
+                            goldLight: '#fbbf24'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Styles iOS Natifs & Safe Areas */
+        :root {
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+        }
+
+        body {
+            background-color: #030712;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Conteneur principal format iPhone */
+        #app-shell {
+            max-width: 480px;
+            margin: 0 auto;
+            height: 100dvh;
+            background-color: #090d16;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+        }
+
+        .pt-safe {
+            padding-top: max(12px, var(--sat));
+        }
+
+        .pb-safe {
+            padding-bottom: max(12px, var(--sab));
+        }
+
+        /* Glassmorphism iOS */
+        .glass {
+            background: rgba(17, 24, 39, 0.78);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-gold {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(17, 24, 39, 0.9) 100%);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+
+        /* Personnalisation Leaflet Dark */
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: #090d16;
+        }
+
+        .leaflet-control-attribution {
+            display: none !important;
+        }
+
+        .custom-pin {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .custom-pin:active {
+            transform: scale(0.9);
+        }
+
+        /* Pulse utilisateur GPS */
+        @keyframes gps-pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 14px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .gps-dot {
+            animation: gps-pulse 2s infinite;
+        }
+
+        /* Sliders stylisés iOS */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            cursor: pointer;
+            margin-top: -8px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #1e293b;
+            border-radius: 999px;
+        }
+
+        /* Scrollbar masquée */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Animations de tiroir (Bottom Sheet) */
+        .sheet-backdrop {
+            transition: opacity 0.25s ease;
+        }
+        .sheet-panel {
+            transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-shell">
+    <!-- ==================== HEADER FLOTTANT ==================== -->
+    <header class="pt-safe px-4 pb-3 z-30 glass border-b border-white/10 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-red-500 via-red-600 to-amber-500 flex items-center justify-center shadow-lg shadow-red-500/25">
+                <span class="text-lg">🎄</span>
+            </div>
+            <div>
+                <div class="flex items-center gap-1.5">
+                    <h1 class="font-extrabold text-base tracking-tight text-white">Noël<span class="text-amber-400">Bet</span></h1>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Live</span>
+                </div>
+                <p id="header-subtitle" class="text-[11px] text-slate-400 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                    Marche GPS active
+                </p>
+            </div>
+        </div>
+
+        <!-- Portefeuille Flocons -->
+        <button onclick="openWalletModal()" class="flex items-center gap-2 bg-slate-900/90 hover:bg-slate-800 active:scale-95 transition px-3 py-1.5 rounded-full border border-amber-500/30 shadow-inner">
+            <span class="text-sm">❄️</span>
+            <span id="wallet-balance" class="font-extrabold text-sm text-amber-400 tabular-nums">1 000</span>
+            <span class="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">+</span>
+        </button>
+    </header>
+
+    <!-- ==================== ZONE DE CONTENU PRINCIPALE ==================== -->
+    <main class="flex-1 relative overflow-hidden">
+
+        <!-- ONGLET 1 : CARTE & MARCHE DE NOËL -->
+        <section id="view-map" class="w-full h-full relative">
+            <div id="map"></div>
+
+            <!-- Bannière d'aide mode simulation / GPS -->
+            <div class="absolute top-3 left-3 right-3 z-20 flex flex-col gap-2 pointer-events-none">
+                <div class="glass rounded-2xl px-3.5 py-2.5 flex items-center justify-between pointer-events-auto shadow-lg">
+                    <div class="flex items-center gap-2.5">
+                        <div id="walk-indicator" class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                            <i data-lucide="footprints" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <p id="gps-status-text" class="text-xs font-semibold text-white">Prêt pour la marche</p>
+                            <p id="gps-sub-text" class="text-[11px] text-slate-400">Touchez la carte pour viser une maison</p>
+                        </div>
+                    </div>
+                    <button id="btn-sim-mode" onclick="toggleSimMode()" class="text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 active:scale-95 transition">
+                        Mode Canapé
+                    </button>
+                </div>
+            </div>
+
+            <!-- Boutons flottants droite (Recentrer / Marche auto) -->
+            <div class="absolute right-3 bottom-24 z-20 flex flex-col gap-2.5">
+                <button onclick="simulateWalkStep()" title="Simuler un pas de marche" class="w-11 h-11 rounded-2xl glass flex items-center justify-center text-amber-400 shadow-lg active:scale-90 transition">
+                    <i data-lucide="navigation" class="w-5 h-5"></i>
+                </button>
+                <button onclick="recenterOnUser()" title="Recentrer sur ma position GPS" class="w-11 h-11 rounded-2xl glass flex items-center justify-center text-white shadow-lg active:scale-90 transition">
+                    <i data-lucide="locate-fixed" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Bouton Principal Flottant : + Noter cette maison -->
+            <div class="absolute bottom-4 left-4 right-4 z-20">
+                <button onclick="openRateModal()" class="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-red-600/30 flex items-center justify-center gap-2.5 active:scale-[0.98] transition">
+                    <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                    <span>Noter & Parier sur cette maison</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- ONGLET 2 : MES PARIS SPORTIFS -->
+        <section id="view-bets" class="w-full h-full overflow-y-auto no-scrollbar p-4 pb-24 hidden">
+            <!-- Résumé Bookmaker -->
+            <div class="glass-gold rounded-3xl p-4 mb-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-amber-400">🎟️ Bilan Parieur Noël</span>
+                    <span id="bets-winrate" class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">0% réussite</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-slate-950/60 rounded-2xl p-2.5">
+                        <p class="text-[11px] text-slate-400">En cours</p>
+                        <p id="stat-active-bets" class="text-lg font-extrabold text-white mt-0.5">0</p>
+                    </div>
+                    <div class="bg-slate-950/60 rounded-2xl p-2.5">
+                        <p class="text-[11px] text-slate-400">Gains potentiels</p>
+                        <p id="stat-potential-win" class="text-lg font-extrabold text-amber-400 mt-0.5">0 ❄️</p>
+                    </div>
+                    <div class="bg-slate-950/60 rounded-2xl p-2.5">
+                        <p class="text-[11px] text-slate-400">Gagnés</p>
+                        <p id="stat-won-bets" class="text-lg font-extrabold text-emerald-400 mt-0.5">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtres Paris -->
+            <div class="flex gap-2 mb-4 overflow-x-auto no-scrollbar">
+                <button onclick="filterBets('all')" data-bet-filter="all" class="bet-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-white text-slate-950">Tous</button>
+                <button onclick="filterBets('open')" data-bet-filter="open" class="bet-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300">En cours</button>
+                <button onclick="filterBets('won')" data-bet-filter="won" class="bet-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300">Gagnés 🏆</button>
+                <button onclick="filterBets('lost')" data-bet-filter="lost" class="bet-filter-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300">Perdus</button>
+            </div>
+
+            <!-- Liste des tickets de pari -->
+            <div id="bets-list" class="space-y-3.5"></div>
+        </section>
+
+        <!-- ONGLET 3 : PALMARÈS DU QUARTIER -->
+        <section id="view-leaderboard" class="w-full h-full overflow-y-auto no-scrollbar p-4 pb-24 hidden">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-lg font-extrabold text-white">Palmarès du Quartier</h2>
+                    <p class="text-xs text-slate-400">Les plus belles illuminations repérées</p>
+                </div>
+                <select id="sort-houses" onchange="renderLeaderboard()" class="bg-slate-800 text-xs font-semibold text-white rounded-xl px-3 py-2 border border-white/10 outline-none">
+                    <option value="score">Meilleure note ⭐</option>
+                    <option value="recent">Plus récentes 🕒</option>
+                    <option value="odds">Plus grosse cote 🔥</option>
+                </select>
+            </div>
+
+            <!-- Filtre rapide tags -->
+            <div class="flex gap-2 mb-4 overflow-x-auto no-scrollbar pb-1">
+                <button onclick="filterHousesByTag('all')" data-tag-filter="all" class="tag-filter-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-bold bg-red-500 text-white">Tout voir</button>
+                <button onclick="filterHousesByTag('Père Noël géant')" data-tag-filter="Père Noël géant" class="tag-filter-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">🎅 Père Noël géant</button>
+                <button onclick="filterHousesByTag('Synchronisé musique')" data-tag-filter="Synchronisé musique" class="tag-filter-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">🎶 Musique</button>
+                <button onclick="filterHousesByTag('Classique chic')" data-tag-filter="Classique chic" class="tag-filter-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">✨ Classique chic</button>
+                <button onclick="filterHousesByTag('Gonflables')" data-tag-filter="Gonflables" class="tag-filter-btn shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">🎈 Gonflables</button>
+            </div>
+
+            <div id="houses-list" class="space-y-3.5"></div>
+        </section>
+
+    </main>
+
+    <!-- ==================== BARRE DE NAVIGATION BASSE (iOS TAB BAR) ==================== -->
+    <nav class="pb-safe pt-2 px-6 glass border-t border-white/10 flex items-center justify-around z-30 shrink-0">
+        <button onclick="switchTab('map')" id="tab-map" class="nav-btn flex flex-col items-center gap-1 py-1 text-red-400 transition">
+            <i data-lucide="map-pin" class="w-6 h-6"></i>
+            <span class="text-[10px] font-bold">Marche</span>
+        </button>
+
+        <button onclick="switchTab('bets')" id="tab-bets" class="nav-btn relative flex flex-col items-center gap-1 py-1 text-slate-400 transition">
+            <div class="relative">
+                <i data-lucide="ticket" class="w-6 h-6"></i>
+                <span id="badge-open-bets" class="hidden absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">0</span>
+            </div>
+            <span class="text-[10px] font-bold">Mes Paris</span>
+        </button>
+
+        <button onclick="switchTab('leaderboard')" id="tab-leaderboard" class="nav-btn flex flex-col items-center gap-1 py-1 text-slate-400 transition">
+            <i data-lucide="trophy" class="w-6 h-6"></i>
+            <span class="text-[10px] font-bold">Palmarès</span>
+        </button>
+    </nav>
+
+    <!-- ==================== MODAL 1 : NOTER UNE MAISON & PLACER UN PARI ==================== -->
+    <div id="rate-modal" class="fixed inset-0 z-50 hidden">
+        <div onclick="closeRateModal()" class="sheet-backdrop absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+        <div class="sheet-panel absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-slate-900 rounded-t-3xl border-t border-white/15 max-h-[92dvh] flex flex-col shadow-2xl">
+            <!-- Poignée iOS -->
+            <div class="pt-3 pb-2 flex justify-center shrink-0">
+                <div class="w-10 h-1.5 rounded-full bg-slate-700"></div>
+            </div>
+
+            <div class="px-5 pb-3 flex items-center justify-between border-b border-white/10 shrink-0">
+                <div>
+                    <h3 class="text-lg font-extrabold text-white">Nouvelle Maison Repérée</h3>
+                    <p class="text-xs text-slate-400">Note les décos & lance ton pronostic</p>
+                </div>
+                <button onclick="closeRateModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- Formulaire scrollable -->
+            <div class="p-5 overflow-y-auto no-scrollbar space-y-5 pb-safe">
+                <!-- Adresse & Photo -->
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5">Adresse ou surnom de la maison</label>
+                        <div class="relative">
+                            <input type="text" id="input-address" placeholder="Ex: 42 Rue des Sapins..." class="w-full bg-slate-950 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-amber-400 outline-none">
+                            <button onclick="refreshAddressFromCoords()" title="Actualiser l'adresse GPS" class="absolute right-2.5 top-2.5 p-1.5 rounded-xl bg-slate-800 text-amber-400">
+                                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Capture Photo -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1.5">Photo souvenir (optionnel)</label>
+                        <div class="flex items-center gap-3">
+                            <label class="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-800 border border-dashed border-slate-600 text-xs font-bold text-slate-200 cursor-pointer active:scale-98 transition">
+                                <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
+                                <span>Prendre / Choisir une photo</span>
+                                <input type="file" id="input-photo" accept="image/*" capture="environment" onchange="handlePhotoUpload(event)" class="hidden">
+                            </label>
+                            <div id="photo-preview-box" class="hidden w-14 h-14 rounded-2xl overflow-hidden border border-amber-400/50 relative shrink-0">
+                                <img id="photo-preview-img" src="" alt="Aperçu" class="w-full h-full object-cover">
+                                <button onclick="clearPhoto()" class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-white text-[10px] flex items-center justify-center">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Critères de Notation -->
+                <div class="bg-slate-950/80 rounded-2xl p-4 border border-white/5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-slate-300">Évaluation Déco</span>
+                        <div class="flex items-center gap-1.5 bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                            <span class="text-xs">⭐</span>
+                            <span id="live-total-score" class="text-sm font-black text-amber-400">8.0</span>
+                            <span class="text-[10px] text-amber-300/70">/ 10</span>
+                        </div>
+                    </div>
+
+                    <!-- Critère 1 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">💡 Lumières & Couleurs</span>
+                            <span id="val-lights" class="font-bold text-white">8 / 10</span>
+                        </div>
+                        <input type="range" id="rate-lights" min="1" max="10" value="8" oninput="updateLiveScore()" class="w-full">
+                    </div>
+
+                    <!-- Critère 2 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">🎅 Originalité & Gonflables</span>
+                            <span id="val-originality" class="font-bold text-white">8 / 10</span>
+                        </div>
+                        <input type="range" id="rate-originality" min="1" max="10" value="8" oninput="updateLiveScore()" class="w-full">
+                    </div>
+
+                    <!-- Critère 3 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">🎄 Magie & Esprit de Noël</span>
+                            <span id="val-spirit" class="font-bold text-white">8 / 10</span>
+                        </div>
+                        <input type="range" id="rate-spirit" min="1" max="10" value="8" oninput="updateLiveScore()" class="w-full">
+                    </div>
+
+                    <!-- Tags rapides -->
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-400 mb-2">Tags rapides :</p>
+                        <div id="tags-selector" class="flex flex-wrap gap-1.5">
+                            <button type="button" onclick="toggleFormTag(this, 'Père Noël géant')" class="form-tag px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-slate-800 text-slate-300 border border-white/5">🎅 Père Noël géant</button>
+                            <button type="button" onclick="toggleFormTag(this, 'Synchronisé musique')" class="form-tag px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-slate-800 text-slate-300 border border-white/5">🎶 Synchronisé musique</button>
+                            <button type="button" onclick="toggleFormTag(this, 'Trop intense')" class="form-tag px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-slate-800 text-slate-300 border border-white/5">⚡ Trop intense</button>
+                            <button type="button" onclick="toggleFormTag(this, 'Classique chic')" class="form-tag px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-slate-800 text-slate-300 border border-white/5">✨ Classique chic</button>
+                            <button type="button" onclick="toggleFormTag(this, 'Gonflables')" class="form-tag px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-slate-800 text-slate-300 border border-white/5">🎈 Gonflables</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TICKET DE PARI SPORTIF -->
+                <div class="glass-gold rounded-2xl p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base">🎟️</span>
+                            <div>
+                                <h4 class="text-xs font-extrabold uppercase tracking-wider text-amber-400">Ticket de Pari Sportif</h4>
+                                <p class="text-[11px] text-slate-300">Quand vont-ils retirer les décos ?</p>
+                            </div>
+                        </div>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggle-bet" checked onchange="toggleBetSection()" class="sr-only peer">
+                            <div class="w-10 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all relative peer-checked:bg-emerald-500"></div>
+                        </label>
+                    </div>
+
+                    <div id="bet-builder-content" class="space-y-3.5">
+                        <!-- Choix des créneaux avec cotes -->
+                        <div class="grid grid-cols-2 gap-2" id="odds-grid">
+                            <!-- Généré dynamiquement par JS -->
+                        </div>
+
+                        <!-- Option Date Précise (Cote Boostée !) -->
+                        <div class="bg-slate-950/70 rounded-xl p-2.5 border border-white/10 flex items-center justify-between">
+                            <div>
+                                <span class="text-[11px] font-bold text-white block">🎯 Date exacte (Cote Boostée)</span>
+                                <span class="text-[10px] text-slate-400">Précision chirurgicale (±1 jour)</span>
+                            </div>
+                            <input type="date" id="exact-bet-date" onchange="selectExactDateBet()" class="bg-slate-800 text-white text-xs font-bold rounded-lg px-2.5 py-1.5 border border-amber-500/40 outline-none">
+                        </div>
+
+                        <!-- Montant de la mise -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1.5">
+                                <span class="text-slate-300 font-semibold">Ta mise (Flocons)</span>
+                                <span class="text-slate-400">Solde : <strong id="modal-balance" class="text-amber-400">1 000</strong> ❄️</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" id="bet-stake" value="100" min="10" step="10" oninput="updatePotentialPayout()" class="w-24 bg-slate-950 border border-amber-500/40 rounded-xl px-3 py-2 text-sm font-extrabold text-amber-400 text-center outline-none">
+                                <div class="flex-1 grid grid-cols-4 gap-1.5">
+                                    <button type="button" onclick="setStake(50)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white">50</button>
+                                    <button type="button" onclick="setStake(100)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white">100</button>
+                                    <button type="button" onclick="setStake(250)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white">250</button>
+                                    <button type="button" onclick="setStake('max')" class="py-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">MAX</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Résumé Cote & Gain Potentiel -->
+                        <div class="bg-slate-950 rounded-xl p-3 flex items-center justify-between border border-emerald-500/30">
+                            <div>
+                                <p class="text-[10px] uppercase tracking-wider text-slate-400">Cote sélectionnée</p>
+                                <p id="selected-odds-display" class="text-base font-black text-white">2.40</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] uppercase tracking-wider text-slate-400">Gain potentiel</p>
+                                <p id="potential-payout-display" class="text-lg font-black text-emerald-400">240 ❄️</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bouton Valider -->
+                <button onclick="submitHouseAndBet()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-sm shadow-lg shadow-emerald-500/25 active:scale-[0.98] transition">
+                    Valider la note & Placer le pari 🚀
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 2 : CLÔTURER / VÉRIFIER UN PARI ==================== -->
+    <div id="resolve-modal" class="fixed inset-0 z-50 hidden">
+        <div onclick="closeResolveModal()" class="sheet-backdrop absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+        <div class="sheet-panel absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-slate-900 rounded-t-3xl border-t border-white/15 p-5 pb-safe shadow-2xl">
+            <div class="w-10 h-1.5 rounded-full bg-slate-700 mx-auto mb-4"></div>
+            <h3 class="text-lg font-extrabold text-white mb-1">Constat de retrait des décos</h3>
+            <p id="resolve-house-name" class="text-xs text-amber-400 font-semibold mb-4">Adresse de la maison</p>
+
+            <div class="bg-slate-950 rounded-2xl p-3.5 border border-white/10 mb-4 space-y-2 text-xs">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Ton pronostic :</span>
+                    <span id="resolve-prediction-label" class="font-bold text-white">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Mise & Cote :</span>
+                    <span id="resolve-stake-odds" class="font-bold text-amber-400">--</span>
+                </div>
+            </div>
+
+            <label class="block text-xs font-bold text-slate-300 mb-1.5">À quelle date les décos ont-elles été retirées ?</label>
+            <input type="date" id="resolve-actual-date" class="w-full bg-slate-950 border border-white/15 rounded-2xl px-4 py-3 text-sm font-bold text-white mb-3 outline-none">
+
+            <!-- Raccourcis de test rapide -->
+            <div class="flex gap-2 mb-5">
+                <button type="button" onclick="setResolveDateToday()" class="flex-1 py-2 px-3 rounded-xl bg-slate-800 text-xs font-bold text-slate-200">Aujourd'hui</button>
+                <button type="button" onclick="setResolveDateWinningDemo()" class="flex-1 py-2 px-3 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold">Simuler date gagnante ✨</button>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeResolveModal()" class="flex-1 py-3.5 rounded-2xl bg-slate-800 text-slate-300 font-bold text-sm">Annuler</button>
+                <button onclick="confirmResolveBet()" class="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-sm">Vérifier le résultat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL 3 : PORTEFEUILLE & PARAMÈTRES DÉMO ==================== -->
+    <div id="wallet-modal" class="fixed inset-0 z-50 hidden">
+        <div onclick="closeWalletModal()" class="sheet-backdrop absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+        <div class="sheet-panel absolute bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-slate-900 rounded-t-3xl border-t border-white/15 p-5 pb-safe shadow-2xl">
+            <div class="w-10 h-1.5 rounded-full bg-slate-700 mx-auto mb-4"></div>
+            <div class="text-center mb-5">
+                <div class="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-3xl mx-auto mb-2">❄️</div>
+                <h3 class="text-xl font-black text-white">Banque de Flocons</h3>
+                <p class="text-xs text-slate-400">Monnaie virtuelle 100% gratuite pour tes paris de quartier</p>
+            </div>
+
+            <div class="space-y-3 mb-5">
+                <button onclick="claimDailyBonus()" class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black text-sm flex items-center justify-between shadow-lg">
+                    <span>🎁 Bonus Marche Quotidienne</span>
+                    <span>+ 500 ❄️</span>
+                </button>
+                <button onclick="resetDemoData()" class="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-between">
+                    <span>🔄 Réinitialiser les maisons de démo</span>
+                    <span class="text-slate-500">Reset</span>
+                </button>
+            </div>
+
+            <button onclick="closeWalletModal()" class="w-full py-3 rounded-2xl bg-slate-950 text-slate-400 font-bold text-xs">Fermer</button>
+        </div>
+    </div>
+
+    <!-- ==================== TOAST NOTIFICATION iOS ==================== -->
+    <div id="toast-container" class="fixed top-16 left-4 right-4 max-w-[448px] mx-auto z-50 pointer-events-none flex flex-col gap-2"></div>
+</div>
+
+<script>
+    // ============================================================================
+    // ÉTAT GLOBAL & PERSISTANCE (localStorage)
+    // ============================================================================
+    const STORAGE_KEY = 'noelbet_state_v1';
+
+    // Marchés de paris sportifs disponibles (périodes de retrait des décorations)
+    const BET_MARKETS = [
+        { id: 'before_jan1', label: 'Avant le 1er Janv.', sub: 'Les pressés', odds: 3.80, start: '2026-12-01', end: '2026-12-31' },
+        { id: 'jan_2_8',     label: '2 au 8 Janvier',      sub: 'Juste après les Rois', odds: 1.95, start: '2027-01-01', end: '2027-01-08' },
+        { id: 'jan_9_15',    label: '9 au 15 Janvier',     sub: 'La moyenne du quartier', odds: 2.35, start: '2027-01-09', end: '2027-01-15' },
+        { id: 'jan_16_31',   label: '16 au 31 Janvier',    sub: 'Les prolongations', odds: 3.40, start: '2027-01-16', end: '2027-01-31' },
+        { id: 'feb_plus',    label: 'Février ou + tard',   sub: 'Irreductibles !', odds: 6.50, start: '2027-02-01', end: '2027-06-01' }
+    ];
+
+    let state = {
+        balance: 1000,
+        houses: [],
+        bets: [],
+        userPos: { lat: 46.8032, lng: -71.1779 }, // Lévis, QC par défaut si GPS refusé
+        selectedPos: null,
+        simMode: false,
+        currentBetFilter: 'all',
+        currentTagFilter: 'all'
+    };
+
+    // Variables temporaires du formulaire
+    let formState = {
+        lights: 8,
+        originality: 8,
+        spirit: 8,
+        tags: [],
+        photoData: null,
+        selectedMarketId: 'jan_9_15',
+        exactDate: null,
+        currentOdds: 2.35
+    };
+
+    let resolvingBetId = null;
+
+    // Variables Carte Leaflet
+    let map = null;
+    let userMarker = null;
+    let targetMarker = null;
+    let houseMarkersLayer = null;
+
+    // ============================================================================
+    // INITIALISATION
+    // ============================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+        lucide.createIcons();
+        loadState();
+        initMap();
+        renderOddsGrid();
+        updateWalletUI();
+        renderBets();
+        renderLeaderboard();
+    });
+
+    function loadState() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                state = { ...state, ...parsed };
+            } catch (e) {
+                console.error("Erreur lecture sauvegarde", e);
+            }
+        }
+        // Si aucune maison n'existe, on génère des exemples vivants autour de l'utilisateur
+        if (!state.houses || state.houses.length === 0) {
+            seedDemoData(state.userPos.lat, state.userPos.lng);
+        }
+    }
+
+    function saveState() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+            showToast("⚠️ Espace local plein (photo trop lourde)", "error");
+        }
+        updateWalletUI();
+    }
+
+    function seedDemoData(baseLat, baseLng) {
+        const demoHouses = [
+            {
+                id: 'demo-1',
+                address: '148 Rue Saint-Laurent (Villa Polaire)',
+                lat: baseLat + 0.0018,
+                lng: baseLng + 0.0022,
+                lights: 10,
+                originality: 9,
+                spirit: 10,
+                score: 9.7,
+                tags: ['Synchronisé musique', 'Père Noël géant'],
+                photo: null,
+                createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
+            },
+            {
+                id: 'demo-2',
+                address: '24 Avenue des Sapins',
+                lat: baseLat - 0.0014,
+                lng: baseLng + 0.0015,
+                lights: 8,
+                originality: 7,
+                spirit: 9,
+                score: 8.0,
+                tags: ['Classique chic'],
+                photo: null,
+                createdAt: new Date(Date.now() - 86400000).toISOString()
+            },
+            {
+                id: 'demo-3',
+                address: '77 Boulevard du Pôle Nord',
+                lat: baseLat + 0.0009,
+                lng: baseLng - 0.0025,
+                lights: 9,
+                originality: 10,
+                spirit: 8,
+                score: 9.0,
+                tags: ['Gonflables', 'Trop intense'],
+                photo: null,
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        const demoBets = [
+            {
+                id: 'bet-demo-1',
+                houseId: 'demo-1',
+                houseAddress: '148 Rue Saint-Laurent (Villa Polaire)',
+                marketId: 'jan_16_31',
+                predictionLabel: '16 au 31 Janvier',
+                start: '2027-01-16',
+                end: '2027-01-31',
+                odds: 3.40,
+                stake: 150,
+                potentialWin: 510,
+                status: 'open',
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'bet-demo-2',
+                houseId: 'demo-3',
+                houseAddress: '77 Boulevard du Pôle Nord',
+                marketId: 'jan_2_8',
+                predictionLabel: '2 au 8 Janvier',
+                start: '2027-01-01',
+                end: '2027-01-08',
+                odds: 1.95,
+                stake: 100,
+                potentialWin: 195,
+                status: 'open',
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        state.houses = demoHouses;
+        state.bets = demoBets;
+        saveState();
+    }
+
+    function resetDemoData() {
+        state.balance = 1000;
+        seedDemoData(state.userPos.lat, state.userPos.lng);
+        renderHouseMarkers();
+        renderBets();
+        renderLeaderboard();
+        closeWalletModal();
+        showToast("🎄 Données de démonstration réinitialisées !");
+    }
+
+    // ============================================================================
+    // CARTE LEAFLET & GÉOLOCALISATION
+    // ============================================================================
+    function initMap() {
+        map = L.map('map', {
+            center: [state.userPos.lat, state.userPos.lng],
+            zoom: 16,
+            zoomControl: false
+        });
+
+        // Fond sombre moderne CartoDB Dark Matter
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        houseMarkersLayer = L.layerGroup().addTo(map);
+
+        // Marqueur Position Utilisateur
+        const userIcon = L.divIcon({
+            className: 'custom-user-icon',
+            html: `<div class="w-5 h-5 rounded-full bg-blue-500 border-2 border-white gps-dot shadow-lg"></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+        userMarker = L.marker([state.userPos.lat, state.userPos.lng], { icon: userIcon }).addTo(map);
+
+        // Clic sur la carte pour sélectionner une maison (pratique en marchant ou depuis le canapé)
+        map.on('click', (e) => {
+            setTargetLocation(e.latlng.lat, e.latlng.lng, true);
+        });
+
+        renderHouseMarkers();
+        requestRealGPS();
+    }
+
+    function requestRealGPS() {
+        if (!navigator.geolocation) {
+            document.getElementById('gps-status-text').textContent = "GPS indisponible (Mode carte)";
+            return;
+        }
+
+        navigator.geolocation.watchPosition(
+            (pos) => {
+                if (state.simMode) return;
+                const { latitude, longitude } = pos.coords;
+                const isFirstFix = !state.hasRealGPS;
+                state.hasRealGPS = true;
+                state.userPos = { lat: latitude, lng: longitude };
+                userMarker.setLatLng([latitude, longitude]);
+
+                document.getElementById('gps-status-text').textContent = "Signal GPS verrouillé";
+                document.getElementById('gps-sub-text').textContent = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+                if (isFirstFix) {
+                    map.setView([latitude, longitude], 16);
+                    // Recentrer les maisons de démo si ce sont toujours celles par défaut
+                    if (state.houses.length === 3 && state.houses[0].id === 'demo-1') {
+                        seedDemoData(latitude, longitude);
+                        renderHouseMarkers();
+                        renderLeaderboard();
+                        renderBets();
+                    }
+                }
+            },
+            (err) => {
+                document.getElementById('gps-status-text').textContent = "Mode Canapé / Carte actif";
+                document.getElementById('gps-sub-text').textContent = "Touchez une maison sur la carte";
+            },
+            { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        );
+    }
+
+    function setTargetLocation(lat, lng, showPin = true) {
+        state.selectedPos = { lat, lng };
+        if (targetMarker) {
+            map.removeLayer(targetMarker);
+        }
+        if (showPin) {
+            const targetIcon = L.divIcon({
+                className: 'target-pin',
+                html: `<div class="w-8 h-8 -mt-4 -ml-4 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center text-sm shadow-xl animate-bounce">🏠</div>`,
+                iconSize: [0, 0]
+            });
+            targetMarker = L.marker([lat, lng], { icon: targetIcon }).addTo(map);
+            showToast("📍 Maison ciblée ! Clique sur le bouton rouge pour noter.");
+        }
+    }
+
+    function recenterOnUser() {
+        state.selectedPos = null;
+        if (targetMarker) {
+            map.removeLayer(targetMarker);
+            targetMarker = null;
+        }
+        map.flyTo([state.userPos.lat, state.userPos.lng], 17, { duration: 0.8 });
+        showToast("🎯 Centré sur ta position");
+    }
+
+    function toggleSimMode() {
+        state.simMode = !state.simMode;
+        const btn = document.getElementById('btn-sim-mode');
+        if (state.simMode) {
+            btn.classList.replace('bg-amber-500/20', 'bg-emerald-500');
+            btn.classList.replace('text-amber-300', 'text-slate-950');
+            btn.textContent = "Canapé ON";
+            document.getElementById('gps-status-text').textContent = "Mode Simulation Canapé";
+            showToast("🛋️ Mode Canapé activé : clique n'importe où sur la carte !");
+        } else {
+            btn.classList.replace('bg-emerald-500', 'bg-amber-500/20');
+            btn.classList.replace('text-slate-950', 'text-amber-300');
+            btn.textContent = "Mode Canapé";
+            requestRealGPS();
+        }
+    }
+
+    function simulateWalkStep() {
+        // Simule un déplacement de ~35 mètres dans la rue
+        const dLat = (Math.random() - 0.3) * 0.0006;
+        const dLng = (Math.random() - 0.3) * 0.0006;
+        state.userPos.lat += dLat;
+        state.userPos.lng += dLng;
+        userMarker.setLatLng([state.userPos.lat, state.userPos.lng]);
+        map.panTo([state.userPos.lat, state.userPos.lng]);
+        document.getElementById('gps-sub-text').textContent = `Balade : ${state.userPos.lat.toFixed(4)}, ${state.userPos.lng.toFixed(4)}`;
+        showToast("🚶‍♂️ +35m parcourus dans le quartier !");
+    }
+
+    function renderHouseMarkers() {
+        if (!houseMarkersLayer) return;
+        houseMarkersLayer.clearLayers();
+
+        state.houses.forEach(house => {
+            const activeBet = state.bets.find(b => b.houseId === house.id && b.status === 'open');
+            const badgeColor = house.score >= 9 ? 'from-amber-400 to-red-500' : 'from-emerald-500 to-teal-600';
+
+            const icon = L.divIcon({
+                className: 'house-map-pin',
+                html: `
+                    <div class="relative flex flex-col items-center -translate-x-1/2 -translate-y-full">
+                        <div class="px-2.5 py-1 rounded-full bg-gradient-to-r ${badgeColor} text-white font-black text-xs shadow-lg border border-white/30 flex items-center gap-1 whitespace-nowrap">
+                            <span>🎄 ${house.score.toFixed(1)}</span>
+                            ${activeBet ? `<span class="bg-black/40 px-1.5 py-0.2 rounded-full text-[10px] text-amber-300">@${activeBet.odds.toFixed(2)}</span>` : ''}
+                        </div>
+                        <div class="w-2 h-2 bg-white rotate-45 -mt-1"></div>
+                    </div>
+                `,
+                iconSize: [0, 0]
+            });
+
+            const marker = L.marker([house.lat, house.lng], { icon });
+            marker.on('click', () => {
+                showToast(`🏠 ${house.address} — Note : ${house.score}/10`);
+            });
+            houseMarkersLayer.addLayer(marker);
+        });
+    }
+
+    // Reverse Geocoding via Nominatim OpenStreetMap
+    async function fetchAddressFromCoords(lat, lng) {
+        const input = document.getElementById('input-address');
+        input.value = "Recherche de l'adresse...";
+        try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`, {
+                headers: { 'Accept-Language': 'fr' }
+            });
+            if (!resp.ok) throw new Error("HTTP error");
+            const data = await resp.json();
+            if (data && data.address) {
+                const num = data.address.house_number || Math.floor(Math.random() * 180 + 10);
+                const road = data.address.road || data.address.pedestrian || data.address.suburb || "Rue des Illuminations";
+                input.value = `${num} ${road}`;
+                return;
+            }
+            throw new Error("No address");
+        } catch (e) {
+            const streets = ["Rue des Sapins", "Avenue du Pôle Nord", "Boulevard des Guirlandes", "Allée des Rennes", "Chemin des Flocons"];
+            const randomStreet = streets[Math.floor(Math.random() * streets.length)];
+            const randomNum = Math.floor(Math.random() * 250) + 12;
+            input.value = `${randomNum} ${randomStreet}`;
+        }
+    }
+
+    function refreshAddressFromCoords() {
+        const pos = state.selectedPos || state.userPos;
+        fetchAddressFromCoords(pos.lat, pos.lng);
+    }
+
+    // ============================================================================
+    // NAVIGATION PAR ONGLETS
+    // ============================================================================
+    function switchTab(tabName) {
+        ['map', 'bets', 'leaderboard'].forEach(t => {
+            document.getElementById(`view-${t}`).classList.add('hidden');
+            const btn = document.getElementById(`tab-${t}`);
+            btn.classList.remove('text-red-400');
+            btn.classList.add('text-slate-400');
+        });
+
+        document.getElementById(`view-${tabName}`).classList.remove('hidden');
+        const activeBtn = document.getElementById(`tab-${tabName}`);
+        activeBtn.classList.remove('text-slate-400');
+        activeBtn.classList.add('text-red-400');
+
+        if (tabName === 'map' && map) {
+            setTimeout(() => map.invalidateSize(), 100);
+        } else if (tabName === 'bets') {
+            renderBets();
+        } else if (tabName === 'leaderboard') {
+            renderLeaderboard();
+        }
+    }
+
+    // ============================================================================
+    // LOGIQUE FORMULAIRE NOTATION & TICKET DE PARI
+    // ============================================================================
+    function openRateModal() {
+        const pos = state.selectedPos || state.userPos;
+        fetchAddressFromCoords(pos.lat, pos.lng);
+
+        // Reset valeurs par défaut
+        document.getElementById('rate-lights').value = 8;
+        document.getElementById('rate-originality').value = 8;
+        document.getElementById('rate-spirit').value = 8;
+        formState.tags = [];
+        document.querySelectorAll('.form-tag').forEach(btn => {
+            btn.classList.remove('bg-amber-500', 'text-slate-950');
+            btn.classList.add('bg-slate-800', 'text-slate-300');
+        });
+        clearPhoto();
+        updateLiveScore();
+
+        document.getElementById('modal-balance').textContent = state.balance.toLocaleString('fr-FR');
+        selectMarket('jan_9_15');
+        updatePotentialPayout();
+
+        document.getElementById('rate-modal').classList.remove('hidden');
+    }
+
+    function closeRateModal() {
+        document.getElementById('rate-modal').classList.add('hidden');
+    }
+
+    function updateLiveScore() {
+        const l = parseInt(document.getElementById('rate-lights').value);
+        const o = parseInt(document.getElementById('rate-originality').value);
+        const s = parseInt(document.getElementById('rate-spirit').value);
+
+        document.getElementById('val-lights').textContent = `${l} / 10`;
+        document.getElementById('val-originality').textContent = `${o} / 10`;
+        document.getElementById('val-spirit').textContent = `${s} / 10`;
+
+        const avg = ((l + o + s) / 3).toFixed(1);
+        document.getElementById('live-total-score').textContent = avg;
+    }
+
+    function toggleFormTag(btn, tag) {
+        const idx = formState.tags.indexOf(tag);
+        if (idx > -1) {
+            formState.tags.splice(idx, 1);
+            btn.classList.remove('bg-amber-500', 'text-slate-950');
+            btn.classList.add('bg-slate-800', 'text-slate-300');
+        } else {
+            formState.tags.push(tag);
+            btn.classList.remove('bg-slate-800', 'text-slate-300');
+            btn.classList.add('bg-amber-500', 'text-slate-950');
+        }
+    }
+
+    // Redimensionnement propre de la photo en base64 pour stockage local fluide
+    function handlePhotoUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxW = 500;
+                const scale = Math.min(1, maxW / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                formState.photoData = canvas.toDataURL('image/jpeg', 0.72);
+                document.getElementById('photo-preview-img').src = formState.photoData;
+                document.getElementById('photo-preview-box').classList.remove('hidden');
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function clearPhoto() {
+        formState.photoData = null;
+        document.getElementById('input-photo').value = '';
+        document.getElementById('photo-preview-box').classList.add('hidden');
+    }
+
+    function toggleBetSection() {
+        const enabled = document.getElementById('toggle-bet').checked;
+        const content = document.getElementById('bet-builder-content');
+        content.style.opacity = enabled ? '1' : '0.35';
+        content.style.pointerEvents = enabled ? 'auto' : 'none';
+    }
+
+    function renderOddsGrid() {
+        const grid = document.getElementById('odds-grid');
+        grid.innerHTML = BET_MARKETS.map(m => `
+            <button type="button" onclick="selectMarket('${m.id}')" id="market-btn-${m.id}"
+                class="market-btn text-left p-2.5 rounded-xl bg-slate-950/80 border border-white/10 transition flex items-center justify-between">
+                <div class="pr-1">
+                    <p class="text-[11px] font-bold text-white leading-tight">${m.label}</p>
+                    <p class="text-[9px] text-slate-400 mt-0.5">${m.sub}</p>
+                </div>
+                <span class="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-400 font-black text-xs tabular-nums">
+                    ${m.odds.toFixed(2)}
+                </span>
+            </button>
+        `).join('');
+    }
+
+    function selectMarket(marketId) {
+        formState.selectedMarketId = marketId;
+        formState.exactDate = null;
+        document.getElementById('exact-bet-date').value = '';
+
+        document.querySelectorAll('.market-btn').forEach(b => {
+            b.classList.remove('border-amber-400', 'bg-amber-500/15');
+            b.classList.add('border-white/10', 'bg-slate-950/80');
+        });
+
+        const activeBtn = document.getElementById(`market-btn-${marketId}`);
+        if (activeBtn) {
+            activeBtn.classList.remove('border-white/10', 'bg-slate-950/80');
+            activeBtn.classList.add('border-amber-400', 'bg-amber-500/15');
+        }
+
+        const market = BET_MARKETS.find(m => m.id === marketId);
+        formState.currentOdds = market ? market.odds : 2.00;
+        updatePotentialPayout();
+    }
+
+    function selectExactDateBet() {
+        const dateVal = document.getElementById('exact-bet-date').value;
+        if (!dateVal) return;
+
+        formState.selectedMarketId = 'exact';
+        formState.exactDate = dateVal;
+
+        document.querySelectorAll('.market-btn').forEach(b => {
+            b.classList.remove('border-amber-400', 'bg-amber-500/15');
+            b.classList.add('border-white/10', 'bg-slate-950/80');
+        });
+
+        // Cote boostée dynamique selon la date
+        const d = new Date(dateVal);
+        const month = d.getMonth(); // 0 = Janvier, 1 = Février
+        let boostOdds = 8.50;
+        if (month === 1) boostOdds = 14.00; // Février
+        if (month >= 2) boostOdds = 22.00;  // Mars+
+
+        formState.currentOdds = boostOdds;
+        updatePotentialPayout();
+        showToast(`🎯 Cote boostée à ${boostOdds.toFixed(2)} sur date exacte !`);
+    }
+
+    function setStake(val) {
+        const input = document.getElementById('bet-stake');
+        if (val === 'max') {
+            input.value = state.balance;
+        } else {
+            input.value = Math.min(val, state.balance);
+        }
+        updatePotentialPayout();
+    }
+
+    function updatePotentialPayout() {
+        const stake = Math.max(0, parseInt(document.getElementById('bet-stake').value) || 0);
+        const payout = Math.round(stake * formState.currentOdds);
+        document.getElementById('selected-odds-display').textContent = formState.currentOdds.toFixed(2);
+        document.getElementById('potential-payout-display').textContent = `${payout.toLocaleString('fr-FR')} ❄️`;
+    }
+
+    function submitHouseAndBet() {
+        const address = document.getElementById('input-address').value.trim() || "Maison Illuminée";
+        const l = parseInt(document.getElementById('rate-lights').value);
+        const o = parseInt(document.getElementById('rate-originality').value);
+        const s = parseInt(document.getElementById('rate-spirit').value);
+        const score = parseFloat(((l + o + s) / 3).toFixed(1));
+        const pos = state.selectedPos || state.userPos;
+
+        const wantBet = document.getElementById('toggle-bet').checked;
+        const stake = parseInt(document.getElementById('bet-stake').value) || 0;
+
+        if (wantBet) {
+            if (stake <= 0) {
+                showToast("⚠️ Entre une mise valide en Flocons", "error");
+                return;
+            }
+            if (stake > state.balance) {
+                showToast("⚠️ Solde de Flocons insuffisant !", "error");
+                return;
+            }
+        }
+
+        const houseId = 'house-' + Date.now();
+        const newHouse = {
+            id: houseId,
+            address,
+            lat: pos.lat,
+            lng: pos.lng,
+            lights: l,
+            originality: o,
+            spirit: s,
+            score,
+            tags: [...formState.tags],
+            photo: formState.photoData,
+            createdAt: new Date().toISOString()
+        };
+
+        state.houses.unshift(newHouse);
+
+        if (wantBet) {
+            state.balance -= stake;
+            let predictionLabel = '';
+            let start = '';
+            let end = '';
+
+            if (formState.selectedMarketId === 'exact' && formState.exactDate) {
+                const target = new Date(formState.exactDate);
+                const minD = new Date(target); minD.setDate(target.getDate() - 1);
+                const maxD = new Date(target); maxD.setDate(target.getDate() + 1);
+                start = minD.toISOString().split('T')[0];
+                end = maxD.toISOString().split('T')[0];
+                predictionLabel = `Date exacte : ${formatDateFR(formState.exactDate)} (±1j)`;
+            } else {
+                const m = BET_MARKETS.find(x => x.id === formState.selectedMarketId) || BET_MARKETS[2];
+                predictionLabel = m.label;
+                start = m.start;
+                end = m.end;
+            }
+
+            const newBet = {
+                id: 'bet-' + Date.now(),
+                houseId,
+                houseAddress: address,
+                marketId: formState.selectedMarketId,
+                predictionLabel,
+                start,
+                end,
+                odds: formState.currentOdds,
+                stake,
+                potentialWin: Math.round(stake * formState.currentOdds),
+                status: 'open',
+                createdAt: new Date().toISOString()
+            };
+            state.bets.unshift(newBet);
+        }
+
+        // Nettoyage pin temporaire
+        state.selectedPos = null;
+        if (targetMarker) {
+            map.removeLayer(targetMarker);
+            targetMarker = null;
+        }
+
+        saveState();
+        renderHouseMarkers();
+        renderBets();
+        renderLeaderboard();
+        closeRateModal();
+
+        showToast(wantBet ? `🎟️ Maison notée (${score}/10) & Pari validé !` : `🎄 Maison ajoutée au palmarès !`);
+    }
+
+    // ============================================================================
+    // GESTION DES PARIS SPORTIFS & RÉSOLUTION
+    // ============================================================================
+    function filterBets(filter) {
+        state.currentBetFilter = filter;
+        document.querySelectorAll('.bet-filter-btn').forEach(btn => {
+            if (btn.dataset.betFilter === filter) {
+                btn.classList.remove('bg-slate-800', 'text-slate-300');
+                btn.classList.add('bg-white', 'text-slate-950');
+            } else {
+                btn.classList.remove('bg-white', 'text-slate-950');
+                btn.classList.add('bg-slate-800', 'text-slate-300');
+            }
+        });
+        renderBets();
+    }
+
+    function renderBets() {
+        const list = document.getElementById('bets-list');
+        const openBets = state.bets.filter(b => b.status === 'open');
+        const wonBets = state.bets.filter(b => b.status === 'won');
+        const settledBets = state.bets.filter(b => b.status !== 'open');
+
+        // Mise à jour stats & badge
+        document.getElementById('stat-active-bets').textContent = openBets.length;
+        const totalPotential = openBets.reduce((acc, b) => acc + b.potentialWin, 0);
+        document.getElementById('stat-potential-win').textContent = `${totalPotential.toLocaleString('fr-FR')} ❄️`;
+        document.getElementById('stat-won-bets').textContent = wonBets.length;
+
+        const winrate = settledBets.length > 0 ? Math.round((wonBets.length / settledBets.length) * 100) : 0;
+        document.getElementById('bets-winrate').textContent = `${winrate}% réussite`;
+
+        const badge = document.getElementById('badge-open-bets');
+        if (openBets.length > 0) {
+            badge.textContent = openBets.length;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+
+        const filtered = state.bets.filter(b => state.currentBetFilter === 'all' || b.status === state.currentBetFilter);
+
+        if (filtered.length === 0) {
+            list.innerHTML = `
+                <div class="text-center py-12 px-4 glass rounded-3xl">
+                    <span class="text-4xl block mb-2">🎟️</span>
+                    <p class="text-sm font-bold text-white">Aucun ticket dans cette catégorie</p>
+                    <p class="text-xs text-slate-400 mt-1">Pars en marche et parie sur le retrait des décos !</p>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = filtered.map(bet => {
+            let statusBadge = '';
+            let borderClass = 'border-white/10';
+            if (bet.status === 'open') {
+                statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">⏳ En cours</span>`;
+                borderClass = 'border-amber-500/30';
+            } else if (bet.status === 'won') {
+                statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🏆 GAGNÉ (+${bet.potentialWin} ❄️)</span>`;
+                borderClass = 'border-emerald-500/40';
+            } else {
+                statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-500/20 text-red-300 border border-red-500/30">❌ Perdu</span>`;
+            }
+
+            return `
+                <div class="glass rounded-3xl p-4 border ${borderClass} space-y-3">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <p class="text-xs font-extrabold text-white">${bet.houseAddress}</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Pronostic : <strong class="text-amber-300">${bet.predictionLabel}</strong></p>
+                        </div>
+                        ${statusBadge}
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 bg-slate-950/70 rounded-2xl p-2.5 text-center">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block">Mise</span>
+                            <span class="text-xs font-extrabold text-white">${bet.stake} ❄️</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block">Cote</span>
+                            <span class="text-xs font-black text-amber-400">@${bet.odds.toFixed(2)}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-400 block">Gain Potentiel</span>
+                            <span class="text-xs font-extrabold text-emerald-400">${bet.potentialWin} ❄️</span>
+                        </div>
+                    </div>
+
+                    ${bet.status === 'open' ? `
+                        <button onclick="openResolveModal('${bet.id}')" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-white/10 flex items-center justify-center gap-2 active:scale-98 transition">
+                            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+                            <span>Constater le retrait des décos</span>
+                        </button>
+                    ` : `
+                        <p class="text-[11px] text-slate-400 text-right">Constaté le : <strong class="text-slate-200">${formatDateFR(bet.resolvedDate)}</strong></p>
+                    `}
+                </div>
+            `;
+        }).join('');
+
+        lucide.createIcons();
+    }
+
+    function openResolveModal(betId) {
+        const bet = state.bets.find(b => b.id === betId);
+        if (!bet) return;
+        resolvingBetId = betId;
+
+        document.getElementById('resolve-house-name').textContent = bet.houseAddress;
+        document.getElementById('resolve-prediction-label').textContent = bet.predictionLabel;
+        document.getElementById('resolve-stake-odds').textContent = `${bet.stake} ❄️ @ ${bet.odds.toFixed(2)}`;
+        document.getElementById('resolve-actual-date').value = new Date().toISOString().split('T')[0];
+
+        document.getElementById('resolve-modal').classList.remove('hidden');
+    }
+
+    function closeResolveModal() {
+        document.getElementById('resolve-modal').classList.add('hidden');
+        resolvingBetId = null;
+    }
+
+    function setResolveDateToday() {
+        document.getElementById('resolve-actual-date').value = new Date().toISOString().split('T')[0];
+    }
+
+    function setResolveDateWinningDemo() {
+        const bet = state.bets.find(b => b.id === resolvingBetId);
+        if (!bet) return;
+        // Choisit une date au milieu de la fenêtre pariée pour tester la victoire
+        const s = new Date(bet.start).getTime();
+        const e = new Date(bet.end).getTime();
+        const mid = new Date(s + (e - s) / 2);
+        document.getElementById('resolve-actual-date').value = mid.toISOString().split('T')[0];
+    }
+
+    function confirmResolveBet() {
+        const bet = state.bets.find(b => b.id === resolvingBetId);
+        const actualDate = document.getElementById('resolve-actual-date').value;
+        if (!bet || !actualDate) return;
+
+        bet.resolvedDate = actualDate;
+        const isWon = actualDate >= bet.start && actualDate <= bet.end;
+
+        if (isWon) {
+            bet.status = 'won';
+            state.balance += bet.potentialWin;
+            saveState();
+            closeResolveModal();
+            renderBets();
+            renderHouseMarkers();
+            triggerWinCelebration(bet.potentialWin);
+        } else {
+            bet.status = 'lost';
+            saveState();
+            closeResolveModal();
+            renderBets();
+            renderHouseMarkers();
+            showToast(`❌ Dommage ! Retiré le ${formatDateFR(actualDate)} (hors créneau).`, "error");
+        }
+    }
+
+    function triggerWinCelebration(amount) {
+        showToast(`🏆 PARI GAGNÉ ! +${amount.toLocaleString('fr-FR')} Flocons crédités !`);
+        if (typeof confetti === 'function') {
+            confetti({
+                particleCount: 90,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#ef4444', '#10b981', '#f59e0b', '#ffffff']
+            });
+        }
+    }
+
+    // ============================================================================
+    // PALMARÈS DU QUARTIER
+    // ============================================================================
+    function filterHousesByTag(tag) {
+        state.currentTagFilter = tag;
+        document.querySelectorAll('.tag-filter-btn').forEach(btn => {
+            if (btn.dataset.tagFilter === tag) {
+                btn.classList.remove('bg-slate-800', 'text-slate-300');
+                btn.classList.add('bg-red-500', 'text-white');
+            } else {
+                btn.classList.remove('bg-red-500', 'text-white');
+                btn.classList.add('bg-slate-800', 'text-slate-300');
+            }
+        });
+        renderLeaderboard();
+    }
+
+    function renderLeaderboard() {
+        const list = document.getElementById('houses-list');
+        const sortBy = document.getElementById('sort-houses').value;
+
+        let houses = [...state.houses];
+        if (state.currentTagFilter !== 'all') {
+            houses = houses.filter(h => h.tags && h.tags.includes(state.currentTagFilter));
+        }
+
+        if (sortBy === 'score') {
+            houses.sort((a, b) => b.score - a.score);
+        } else if (sortBy === 'recent') {
+            houses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        } else if (sortBy === 'odds') {
+            houses.sort((a, b) => {
+                const betA = state.bets.find(x => x.houseId === a.id)?.odds || 0;
+                const betB = state.bets.find(x => x.houseId === b.id)?.odds || 0;
+                return betB - betA;
+            });
+        }
+
+        if (houses.length === 0) {
+            list.innerHTML = `
+                <div class="text-center py-12 glass rounded-3xl">
+                    <span class="text-4xl block mb-2">🎄</span>
+                    <p class="text-sm font-bold text-white">Aucune maison trouvée</p>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = houses.map((h, idx) => {
+            const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+            const bet = state.bets.find(b => b.houseId === h.id);
+
+            return `
+                <div class="glass rounded-3xl overflow-hidden border border-white/10">
+                    ${h.photo ? `<img src="${h.photo}" alt="${h.address}" class="w-full h-36 object-cover">` : ''}
+                    <div class="p-4">
+                        <div class="flex items-start justify-between gap-2 mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg font-black">${medal}</span>
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-white leading-snug">${h.address}</h3>
+                                    <p class="text-[11px] text-slate-400">Lumières ${h.lights}/10 • Orig. ${h.originality}/10 • Esprit ${h.spirit}/10</p>
+                                </div>
+                            </div>
+                            <div class="px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 font-black text-sm shrink-0">
+                                ⭐ ${h.score.toFixed(1)}
+                            </div>
+                        </div>
+
+                        ${h.tags && h.tags.length > 0 ? `
+                            <div class="flex flex-wrap gap-1.5 mb-3">
+                                ${h.tags.map(t => `<span class="px-2 py-0.5 rounded-lg bg-slate-800 text-[10px] font-semibold text-slate-300">${t}</span>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        <div class="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+                            <button onclick="focusHouseOnMap(${h.lat}, ${h.lng})" class="text-red-400 font-bold flex items-center gap-1">
+                                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                                <span>Voir sur la carte</span>
+                            </button>
+                            ${bet ? `<span class="text-[11px] font-bold text-amber-300">🎟️ Pari : ${bet.predictionLabel} (@${bet.odds.toFixed(2)})</span>` : `<span class="text-[11px] text-slate-500">Aucun pari</span>`}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        lucide.createIcons();
+    }
+
+    function focusHouseOnMap(lat, lng) {
+        switchTab('map');
+        setTimeout(() => {
+            map.flyTo([lat, lng], 18, { duration: 0.9 });
+        }, 150);
+    }
+
+    // ============================================================================
+    // PORTEFEUILLE & UTILITAIRES UI
+    // ============================================================================
+    function updateWalletUI() {
+        document.getElementById('wallet-balance').textContent = state.balance.toLocaleString('fr-FR');
+    }
+
+    function openWalletModal() {
+        document.getElementById('wallet-modal').classList.remove('hidden');
+    }
+
+    function closeWalletModal() {
+        document.getElementById('wallet-modal').classList.add('hidden');
+    }
+
+    function claimDailyBonus() {
+        state.balance += 500;
+        saveState();
+        closeWalletModal();
+        showToast("🎁 +500 Flocons ajoutés à ton portefeuille !");
+    }
+
+    function formatDateFR(isoStr) {
+        if (!isoStr) return '';
+        const [y, m, d] = isoStr.split('-');
+        return `${d}/${m}/${y}`;
+    }
+
+    function showToast(message, type = "info") {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        const bg = type === 'error' ? 'bg-red-950/95 border-red-500/50 text-red-100' : 'bg-slate-900/95 border-amber-500/40 text-white';
+
+        toast.className = `${bg} border backdrop-blur-md px-4 py-3 rounded-2xl shadow-2xl text-xs font-bold flex items-center justify-between transition-all duration-300 transform translate-y-0 opacity-100`;
+        toast.textContent = message;
+
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-10px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 2800);
+    }
+</script>
+</body>
+</html>
